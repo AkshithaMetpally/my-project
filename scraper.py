@@ -262,196 +262,69 @@ class GhostScraper:
                 unique_reviews.append(r)
                 
         return unique_reviews
-
+        
     async def scrape_url(self, url: str) -> List[Dict[str, Any]]:
-        """
-        Main method to navigate, mimic human behavior, and parse dom.
-        """
         reviews: List[Dict[str, Any]] = []
         try:
-            is_flipkart = "flipkart.com" in url.lower()
-            effective_headless = False if is_flipkart else self.headless
-            
-            async with async_playwright() as p:
-                browser = await p.chromium.launch(headless=effective_headless)
+             async with async_playwright() as p:
+                # 1. These specific flags are CRITICAL for Railway/Linux servers
+                browser = await p.chromium.launch(
+                    headless=True, 
+                    args=[
+                        "--no-sandbox", 
+                        "--disable-setuid-sandbox", 
+                        "--disable-dev-shm-usage",
+                        "--disable-blink-features=AutomationControlled"
+                    ]
+                )
+                
+                # 2. Use a mobile user agent (Amazon blocks servers, but rarely blocks mobile Safari)
                 context = await browser.new_context(
-                    user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-                    locale="en-US",
-                    timezone_id="America/New_York",
-                    viewport={'width': 1920, 'height': 1080},
-                    java_script_enabled=True,
-                    has_touch=False
+                    user_agent='Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1',
+                    viewport={'width': 390, 'height': 844}
                 )
                 page = await context.new_page()
                 
-                # Apply evasions to bypass basic bot protection
-                await Stealth().apply_stealth_async(page)
+                from playwright_stealth import stealth_async
+                await stealth_async(page)
                 
-                # Additional stealth overrides
-                await page.add_init_script("""
-                    Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-                    window.chrome = { runtime: {} };
-                """)
-                
-                # Intercept background API requests for hidden JSON reviews (Nykaa/Flipkart)
-                api_responses = []
-                async def handle_response(response):
-                    url_lower = response.url.lower()
-                    if "api" in url_lower or "graphql" in url_lower or "review" in url_lower or "comment" in url_lower:
-                        if response.status == 200:
-                            try:
-                                js = await response.json()
-                                api_responses.append(js)
-                            except:
-                                pass
-                page.on("response", handle_response)
-            
                 try:
-                    # Add random initial delay to mimic user thinking time
-                    await asyncio.sleep(random.uniform(1.0, 3.0))
+                    # 3. Increase timeout and wait for network to be idle
+                    await page.goto(url, wait_until="networkidle", timeout=90000)
                     
-                    await page.goto(url, wait_until="domcontentloaded", timeout=60000)
+                    # 4. Human behavior: A long pause and a scroll
+                    await asyncio.sleep(random.uniform(5.0, 8.0))
+                    await page.evaluate("window.scrollBy(0, 500)")
                     
-                    # If Amazon, try to go to the "See all reviews" page directly to escape lazy loading
+                    # 5. Amazon Bypass: Redirect to the dedicated review page
                     if 'amazon.' in url:
                         try:
-                            # Try to click 'See all reviews'
+                            # Try to find the "See all reviews" link
                             see_all_link = await page.locator("a[data-hook='see-all-reviews-link-foot']").get_attribute('href', timeout=5000)
                             if see_all_link:
-                                await page.goto(f"https://www.amazon.in{see_all_link}", wait_until="domcontentloaded", timeout=60000)
-                        except Exception as e:
-                            print(f"Could not navigate to all reviews page via link: {e}")
-                    
-                    # Perform our human-mimicry scrolling to load dynamic reviews
-                    await self._human_mimicry_scroll(page)
-                    
-                    # Dynamic Waiting: Wait for potential review containers to load
-                    try:
-                        await page.wait_for_selector("div[data-hook='review'], .review-text, .user-review, .z9e2, .wiI7pd", timeout=10000)
-                    except Exception:
-                        print("Dynamic wait timed out. Continuing with extraction.")
-                    
-                    # Expand 'Read More' buttons for full linguistic analysis
-                    try:
-                        # Attempt to close generic cookie/promo modals that intercept clicks
-                        try:
-                            close_buttons = await page.locator("button[aria-label='Close'], button:has-text('Accept'), div[role='dialog'] button").all()
-                            for btn in close_buttons:
-                                 if await btn.is_visible():
-                                     await btn.click(timeout=1000)
-                                     await asyncio.sleep(0.5)
-                        except Exception:
+                                full_url = f"https://www.amazon.in{see_all_link}" if see_all_link.startswith('/') else see_all_link
+                                await page.goto(full_url, wait_until="networkidle")
+                                await asyncio.sleep(3)
+                        except:
                             pass
-                            
-                        # Common selectors for read more/view more buttons
-                        read_more_selectors = [
-                            "button:has-text('Read more')",
-                            "button:has-text('Read More')",
-                            "button:has-text('View more')",
-                            "button:has-text('View More')",
-                            "button:has-text('Show more')",
-                            "a:has-text('Read more')",
-                            "span:has-text('Read more')",
-                            "div[role='button']:has-text('More')",
-                            ".w8nwRe", # Google Maps more button
-                        ]
-                        for selector in read_more_selectors:
-                            buttons = await page.locator(selector).all()
-                            for btn in buttons:
-                                if await btn.is_visible():
-                                    await btn.click()
-                                    await asyncio.sleep(random.uniform(0.1, 0.5))
-                    except Exception as e:
-                        print(f"Failed to expand some reviews: {e}")
-                    
-                    # Final pause before grabbing the DOM
-                    await asyncio.sleep(random.uniform(1.0, 2.0))
-                    
+
+                    # 6. Final check for the review containers
+                    try:
+                        await page.wait_for_selector('div[data-hook="review"]', timeout=15000)
+                    except:
+                        print("Reviews didn't appear in time, attempting extraction anyway.")
+
                     html_content = await page.content()
-                    with open("debug_apple_macbook.html", "w", encoding="utf-8") as f:
-                        f.write(html_content)
                     reviews = self.extract_reviews(html_content)
                     
                 except Exception as e:
-                    print(f"Error scraping {url}: {e}")
-                    
+                    print(f"Scrape attempt failed: {e}")
                 finally:
-                    if 'browser' in locals():
-                        await browser.close()
-                        
-                # If DOM extraction failed, check the background APIs!
-                if not reviews and api_responses:
-                    import json
-                    for api_data in api_responses:
-                        # Recursively hunt for review text in the JSON
-                        def hunt_json(d, found):
-                            if isinstance(d, dict):
-                                for k, v in d.items():
-                                    if k.lower() in ('text', 'body', 'description', 'review', 'comment', 'title', 'content') and isinstance(v, str) and len(v) > 30 and 'cookie' not in v.lower() and '<html' not in v.lower():
-                                        found.append(v)
-                                    hunt_json(v, found)
-                            elif isinstance(d, list):
-                                for item in d:
-                                    hunt_json(item, found)
-                        
-                        found_texts = []
-                        hunt_json(api_data, found_texts)
-                        if len(found_texts) > 2: # At least a few texts to consider it a review payload
-                            for txt in found_texts:
-                                reviews.append({'id': len(reviews) + 1, 'text': txt.strip(), 'rating_raw': 'Found in API', 'timestamp': None})
-                            if len(reviews) > 0:
-                                 break # Stop after finding the first good payload
+                    await browser.close()
                     
         except Exception as e:
-            print(f"Playwright initialization error: {e}")
+            print(f"Playwright error: {e}")
             
-        # 3. Ultimate Fallback: curl_cffi Bypass
-        # If Playwright was completely blocked by a CAPTCHA (0 reviews extracted), 
-        # try a direct HTTP request mimicking Chrome 120. This bypasses advanced TLS fingerprinting bot protections.
-        if not reviews and curl_requests:
-            print(f"Playwright yielded 0 reviews for {url}. Attempting curl_cffi ultimate fallback...")
-            try:
-                # Wrap the synchronous requests.get in asyncio to avoid blocking the event loop
-                response = await asyncio.to_thread(
-                    curl_requests.get, 
-                    url, 
-                    impersonate="chrome120", 
-                    timeout=20
-                )
-                if response.status_code == 200:
-                    html_content = response.text
-                    fallback_reviews = self.extract_reviews(html_content)
-                    if fallback_reviews:
-                        print(f"curl_cffi fallback successfully extracted {len(fallback_reviews)} reviews.")
-                        reviews = fallback_reviews
-                    else:
-                        print("curl_cffi fallback also found 0 reviews. The page may simply have no reviews.")
-                else:
-                    print(f"curl_cffi fallback returned status code: {response.status_code}")
-            except Exception as e:
-                print(f"curl_cffi fallback failed: {e}")
-
-        # 4. Auto-Headful WAF Evasion
-        # If both headless Playwright and curl_cffi failed (common on Datadome/Akamai sites like Yelp/Meesho),
-        # restart the scrape using a visible, human-like browser to bypass the block.
-        if not reviews and self.headless and not "flipkart.com" in url.lower():
-             print(f"Both Headless Playwright and HTTP fallback failed for {url}.")
-             print("Likely a strong WAF block (Datadome/Akamai). Triggering Tier 3 Auto-Headful Fallback...")
-             headful_scraper = GhostScraper(headless=False)
-             return await headful_scraper.scrape_url(url)
-             
-        # Ultimate WAF Check: if even headful failed, check if the site is actively throwing Datadome/Akamai
-        if not reviews and curl_requests:
-            try:
-                res = await asyncio.to_thread(curl_requests.get, url, impersonate="chrome120", timeout=10)
-                html = res.text.lower()
-                if "geo.captcha-delivery.com" in html or "datadome" in html or "akamai" in html:
-                    raise ValueError("WAF_BLOCK: Enterprise Firewall (Datadome/Akamai) intercepted request.")
-            except ValueError as e:
-                raise e
-            except Exception:
-                pass
-
         return reviews
 
 # Optional: Run directly for testing
