@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GhostX: Deceptive Opinion Spam Detection</title>
+    <!-- Modern Typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Inter:wght@400;500;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="glass-header">
+            <div class="logo">
+                <i class="fa-solid fa-ghost"></i>
+                <h1>Ghost<span>X</span></h1>
+            </div>
+            <p class="subtitle">Platform-Agnostic Fake Review Detection Engine</p>
+        </header>
+
+        <!-- Main Content -->
+        <main>
+            <!-- Input Section -->
+            <section class="analysis-panel glass-panel">
+                <div class="tabs">
+                    <button class="tab-btn active" data-tab="url-tab"><i class="fa-solid fa-link"></i> Live URL
+                        Scan</button>
+                    <button class="tab-btn" data-tab="text-tab"><i class="fa-solid fa-file-lines"></i> Manual Text
+                        Check</button>
+                </div>
+
+                <!-- URL Tab Content -->
+                <div id="url-tab" class="tab-content active">
+                    <h2>Analyze Product URL</h2>
+                    <p class="tab-description">Scrape and analyze reviews directly from a live page.</p>
+                    <div class="input-group">
+                        <i class="fa-solid fa-globe input-icon"></i>
+                        <input type="url" id="urlInput"
+                            placeholder="Enter product URL to scan (e.g., https://example.com/product/123)..." required>
+                        <button id="analyzeUrlBtn" class="primary-btn">
+                            <span>Scan URL</span>
+                            <i class="fa-solid fa-radar fa-spin-pulse" style="display:none;" id="btnSpinnerUrl"></i>
+                            <i class="fa-solid fa-arrow-right" id="btnArrowUrl"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Text Tab Content -->
+                <div id="text-tab" class="tab-content">
+                    <h2>Manual Text Check</h2>
+                    <p class="tab-description">Paste a single suspicious review or text block for deep linguistic
+                        analysis.</p>
+                    <div class="input-group input-group-vertical">
+                        <textarea id="textInput" rows="5"
+                            placeholder="Paste the review text here to perform a manual stylometric and contextual check..."
+                            required></textarea>
+                        <button id="analyzeTextBtn" class="primary-btn">
+                            <span>Analyze Text</span>
+                            <i class="fa-solid fa-radar fa-spin-pulse" style="display:none;" id="btnSpinnerText"></i>
+                            <i class="fa-solid fa-arrow-right" id="btnArrowText"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="status-message" id="statusMessage"></div>
+            </section>
+
+            <!-- Loading State -->
+            <div id="loadingOverlay" class="loading-overlay hidden">
+                <div class="scanner-ring"></div>
+                <h3 id="loadingTitle">Initializing GhostX Engine...</h3>
+                <p id="loadingMessage" class="sub-loading">Preparing local inference environment...</p>
+            </div>
+
+            <!-- Results Section -->
+            <section id="resultsSection" class="results-section hidden">
+                <div class="results-header-container">
+                    <div class="results-title">
+                        <h2>Review Analysis Report</h2>
+                        <p id="productSubtitle">Product: Analyzing URL...</p>
+                        <p id="analyzedCountSubtitle">Analyzed -- reviews</p>
+                    </div>
+                    <div class="overall-score-block">
+                        <div class="score-label">Overall Trust Score</div>
+                        <div class="score-value" id="overallTrustScore">--%</div>
+                        <div class="trust-badge" id="trustBadge">Evaluating...</div>
+                    </div>
+                </div>
+
+                <div class="metrics-dashboard">
+                    <div class="metric-card">
+                        <div class="metric-header">Total Reviews</div>
+                        <div class="metric-value-row">
+                            <div class="metric-value" id="totalReviewsMetric">--</div>
+                            <i class="fa-solid fa-shield-halved metric-icon blue"></i>
+                        </div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-header">Suspicious Reviews</div>
+                        <div class="metric-value-row">
+                            <div class="metric-value" id="suspiciousReviewsMetric" style="color: var(--danger)">--</div>
+                            <i class="fa-solid fa-triangle-exclamation metric-icon red"></i>
+                        </div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-header">Genuine Reviews</div>
+                        <div class="metric-value-row">
+                            <div class="metric-value" id="genuineReviewsMetric" style="color: var(--success)">--</div>
+                            <i class="fa-regular fa-circle-check metric-icon green"></i>
+                        </div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-header">Avg Rating</div>
+                        <div class="metric-value-row">
+                            <div class="metric-value" id="avgRatingMetric">--</div>
+                            <i class="fa-solid fa-arrow-trend-up metric-icon purple"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Pill Tabs System -->
+                <div class="pill-tabs">
+                    <button class="pill-btn active" data-target="overview-view">Overview</button>
+                    <button class="pill-btn" data-target="reviews-view">Reviews</button>
+                    <button class="pill-btn" data-target="ai-view">AI Analysis</button>
+                    <button class="pill-btn" data-target="patterns-view">Patterns</button>
+                </div>
+
+                <!-- Overview Tab panel -->
+                <div id="overview-view" class="pill-content active">
+                    <div class="overview-grid">
+                        <div class="chart-card">
+                            <h3>Trust Score Breakdown</h3>
+                            <p class="chart-desc">Hybrid ML model scores and final weighted average</p>
+                            <div class="bar-chart-container">
+                                <div class="y-axis-labels">
+                                    <span>100</span>
+                                    <span>75</span>
+                                    <span>50</span>
+                                    <span>25</span>
+                                    <span>0</span>
+                                </div>
+                                <div class="chart-bar-group">
+                                    <div class="chart-bar" id="bertBar" style="height: 0%"></div>
+                                    <span class="chart-label">BERT Model</span>
+                                </div>
+                                <div class="chart-bar-group">
+                                    <div class="chart-bar" id="rfBar" style="height: 0%"></div>
+                                    <span class="chart-label">Rule Features</span>
+                                </div>
+                                <div class="chart-bar-group">
+                                    <div class="chart-bar" id="finalBar" style="height: 0%"></div>
+                                    <span class="chart-label">Final Score</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="chart-card">
+                            <h3>Rating Distribution</h3>
+                            <p class="chart-desc">Breakdown of star ratings across all reviews</p>
+                            <div class="pie-layout">
+                                <div class="pie-chart-wrapper">
+                                    <div class="pie-chart" id="ratingPieChart"></div>
+                                </div>
+                                <div class="pie-labels" id="pieLabels">
+                                    <!-- Dynamic labels -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="chart-card">
+                        <h3>Feature Importance Analysis</h3>
+                        <p class="chart-desc">Key factors that influenced the trust score classification (SHAP values)
+                        </p>
+                        <div class="feature-list" id="featureListContainer">
+                            <!-- Dynamic features -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Live Reviews Tab Panel -->
+                <div id="reviews-view" class="pill-content">
+                    <div class="reviews-feed" id="reviewsContainer">
+                        <!-- Review Cards will be injected here via JS -->
+                    </div>
+                </div>
+
+                <!-- Stubs for the other views -->
+                <div id="ai-view" class="pill-content">
+                    <div class="chart-card">
+                        <h3>Deep AI Linguistic Breakdown</h3>
+                        <p class="chart-desc">Coming soon: advanced stylometric visualizations.</p>
+                    </div>
+                </div>
+
+                <div id="patterns-view" class="pill-content">
+                    <div class="chart-card">
+                        <h3>Temporal Review Patterns</h3>
+                        <p class="chart-desc">Coming soon: time-series graph of review bursts.</p>
+                    </div>
+                </div>
+
+            </section>
+        </main>
+
+        <!-- Footer -->
+        <footer>
+            <p>Powered by BERT Contextual Analysis & Random Forest Statistical Metadata Verification</p>
+        </footer>
+    </div>
+    <script src="/static/js/main.js"></script>
+</body>
+
+</html>
