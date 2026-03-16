@@ -1,11 +1,12 @@
-[variables]
-    PYTHONUNBUFFERED = "1"
-
 [phases.setup]
-    nixPkgs = ["python311", "playwright-driver", "glib", "nss", "nspr", "atk", "at-spi2-atk", "cairo", "expat", "libxcb", "libX11", "libXcomposite", "libXdamage", "libXext", "libXfixes", "libXrandr", "libgbm", "pango", "alsa-lib"]
+    nixPkgs = ["python311", "playwright-driver"]
 
 [phases.install]
-    cmds = ["python -m venv /opt/venv && /opt/venv/bin/pip install -r requirements.txt", "/opt/venv/bin/playwright install --with-deps chromium"]
+    cmds = [
+        "python -m venv /opt/venv",
+        "/opt/venv/bin/pip install -r requirements.txt",
+        "/opt/venv/bin/playwright install chromium"
+    ]
 
 [start]
     cmd = "/opt/venv/bin/gunicorn app:app"
